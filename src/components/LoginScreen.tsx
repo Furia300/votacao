@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
-import { Flame } from "lucide-react";
+import { Vote } from "lucide-react";
 
 export default function LoginScreen() {
   const { signInWithGoogle, loading } = useAuth();
@@ -27,18 +27,18 @@ export default function LoginScreen() {
           <div
             className="flex items-center justify-center w-16 h-16 rounded-2xl"
             style={{
-              background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-              boxShadow: "0 8px 24px -4px rgba(239, 68, 68, 0.4)",
+              background: "linear-gradient(135deg, #f6921e 0%, #e07310 100%)",
+              boxShadow: "0 8px 24px -4px rgba(246, 146, 30, 0.4)",
             }}
           >
-            <Flame size={32} color="#fff" />
+            <Vote size={32} color="#fff" />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>
-              <span style={{ color: "var(--error)" }}>ATO 1</span> — O Caos
+              Votacao <span style={{ color: "var(--primary)" }}>FIPS</span>
             </h1>
             <p className="text-sm mt-1" style={{ color: "var(--foreground-muted)" }}>
-              Apresentacao 3 Atos — FIPS
+              Centro de Aprovacao de Projetos
             </p>
           </div>
         </div>
@@ -49,9 +49,9 @@ export default function LoginScreen() {
           style={{ background: "var(--bg-muted)", border: "1px solid var(--border-light)" }}
         >
           <p className="text-xs leading-relaxed text-center" style={{ color: "var(--foreground-muted)" }}>
-            Faca login com seu Google corporativo para votar nos cenarios
-            que melhor representam o caos do passado em cada setor.
-            Sua identidade sera registrada em cada voto.
+            Faca login com seu Google para acessar a plataforma de votacao.
+            Crie projetos, adicione itens para aprovacao e acompanhe
+            as decisoes dos gestores em tempo real.
           </p>
         </div>
 
@@ -88,7 +88,7 @@ export default function LoginScreen() {
         </button>
 
         <p className="text-center text-[10px] mt-4" style={{ color: "var(--foreground-subtle)" }}>
-          44 modulos | 132 cenarios | Votacao em tempo real
+          Projetos | Votacao | Aprovacao em tempo real
         </p>
       </div>
     </div>

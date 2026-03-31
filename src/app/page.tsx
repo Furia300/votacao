@@ -1,99 +1,152 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
-import { modulosCaos, sectors } from "@/data/modulosCaos";
-import { submitVote, getMyVotes } from "@/lib/supabase";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { getProjects, getProjectMembers, updateProjectStatus, type Project } from "@/lib/supabase";
 import Header from "@/components/Header";
-import ModuleSection from "@/components/ModuleSection";
-import VotingPanel from "@/components/VotingPanel";
 import LoginScreen from "@/components/LoginScreen";
-import { Search, Filter } from "lucide-react";
+import { Plus, Users, GripVertical, ImageIcon, Vote, LayoutDashboard } from "lucide-react";
+
+type KanbanStatus = Project["status"];
+
+interface ColumnDef {
+  status: KanbanStatus;
+  label: string;
+  color: string;
+  bgTint: string;
+}
+
+const COLUMNS: ColumnDef[] = [
+  { status: "draft", label: "Rascunho", color: "#6b7280", bgTint: "rgba(107,114,128,0.08)" },
+  { status: "voting", label: "Em Votacao", color: "var(--fips-blue)", bgTint: "rgba(0,144,208,0.08)" },
+  { status: "finalized", label: "Finalizado", color: "var(--success)", bgTint: "rgba(0,198,76,0.08)" },
+  { status: "archived", label: "Arquivado", color: "var(--foreground-muted)", bgTint: "rgba(71,85,105,0.08)" },
+];
 
 export default function Home() {
   const { user, loading, supabase } = useAuth();
-  const [votes, setVotes] = useState<Record<string, boolean>>({});
-  const [activeSector, setActiveSector] = useState("Todos");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
+  const [voteCounts, setVoteCounts] = useState<Record<string, { total: number; voted: number }>>({});
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<KanbanStatus | null>(null);
 
-  const voterName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
-  const voterEmail = user?.email || "";
-  const voterAvatar = user?.user_metadata?.avatar_url || "";
-
-  // Load existing votes for this user from Supabase
+  // Load projects
   useEffect(() => {
-    if (!supabase || !voterEmail) return;
+    if (!supabase || !user) return;
+
+    let cancelled = false;
 
     (async () => {
       try {
-        const myVotes = await getMyVotes(supabase, voterEmail);
-        const votesMap: Record<string, boolean> = {};
-        myVotes.forEach((v) => {
-          votesMap[v.example_id] = v.approved;
-        });
-        setVotes(votesMap);
+        const data = await getProjects(supabase);
+        if (cancelled) return;
+        setProjects(data);
+
+        // Load member counts for each project
+        const counts: Record<string, number> = {};
+        const vCounts: Record<string, { total: number; voted: number }> = {};
+
+        await Promise.all(
+          data.map(async (p) => {
+            try {
+              const members = await getProjectMembers(supabase, p.id);
+              counts[p.id] = members.length;
+              const finalized = members.filter((m) => m.has_finalized).length;
+              vCounts[p.id] = { total: members.length, voted: finalized };
+            } catch {
+              counts[p.id] = 0;
+              vCounts[p.id] = { total: 0, voted: 0 };
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setMemberCounts(counts);
+          setVoteCounts(vCounts);
+        }
       } catch {
-        // Supabase not ready
+        // supabase not ready
+      } finally {
+        if (!cancelled) setLoadingProjects(false);
       }
     })();
-  }, [supabase, voterEmail]);
 
-  const handleVote = useCallback(
-    async (exampleId: string, moduleId: number, moduleName: string, approved: boolean) => {
-      if (!supabase || !voterEmail) return;
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, user]);
 
-      // Toggle: if same vote, remove it
-      const currentVote = votes[exampleId];
-      const newApproved = currentVote === approved ? undefined : approved;
+  // Drag handlers
+  const handleDragStart = useCallback((e: React.DragEvent, projectId: string) => {
+    setDraggedId(projectId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", projectId);
+  }, []);
 
-      if (newApproved === undefined) {
-        setVotes((prev) => {
-          const next = { ...prev };
-          delete next[exampleId];
-          return next;
-        });
+  const handleDragOver = useCallback((e: React.DragEvent, status: KanbanStatus) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverColumn(status);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverColumn(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent, targetStatus: KanbanStatus) => {
+      e.preventDefault();
+      setDragOverColumn(null);
+      const projectId = e.dataTransfer.getData("text/plain");
+      if (!projectId || !supabase) return;
+
+      const project = projects.find((p) => p.id === projectId);
+      if (!project || project.status === targetStatus) {
+        setDraggedId(null);
         return;
       }
 
-      setVotes((prev) => ({ ...prev, [exampleId]: newApproved }));
+      // Optimistic update
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, status: targetStatus } : p))
+      );
+      setDraggedId(null);
 
       try {
-        await submitVote(supabase, {
-          example_id: exampleId,
-          module_id: moduleId,
-          module_name: moduleName,
-          voter_name: voterName,
-          voter_email: voterEmail,
-          voter_avatar: voterAvatar,
-          approved: newApproved,
-        });
+        await updateProjectStatus(supabase, projectId, targetStatus);
       } catch {
-        // Supabase error, votes saved locally only
+        // Revert on error
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? { ...p, status: project.status } : p))
+        );
       }
     },
-    [supabase, voterName, voterEmail, voterAvatar, votes]
+    [supabase, projects]
   );
 
-  const filteredModules = useMemo(() => {
-    return modulosCaos.filter((m) => {
-      const matchesSector = activeSector === "Todos" || m.sector === activeSector;
-      const matchesSearch =
-        !searchQuery ||
-        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.sector.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.examples.some(
-          (ex) =>
-            ex.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            ex.description.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      return matchesSector && matchesSearch;
-    });
-  }, [activeSector, searchQuery]);
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null);
+    setDragOverColumn(null);
+  }, []);
 
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <div className="text-sm font-medium" style={{ color: "var(--foreground-muted)" }}>Carregando...</div>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--bg)",
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 500, color: "var(--foreground-muted)" }}>
+          Carregando...
+        </div>
       </div>
     );
   }
@@ -102,107 +155,497 @@ export default function Home() {
     return <LoginScreen />;
   }
 
-  return (
-    <div className="flex flex-col min-h-screen" style={{ paddingBottom: "60px" }}>
-      <Header
-        totalModules={modulosCaos.length}
-        totalExamples={modulosCaos.length * 3}
-      />
+  const getColumnProjects = (status: KanbanStatus) =>
+    projects.filter((p) => p.status === status);
 
-      {/* Hero Banner */}
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <Header />
+
+      {/* Hero section */}
       <div
-        className="mx-4 sm:mx-6 mt-4 rounded-[20px] px-6 sm:px-8 py-8 relative overflow-hidden"
-        style={{ background: "var(--gradient-hero)" }}
+        style={{
+          margin: "16px 16px 0",
+          borderRadius: 20,
+          padding: "32px 32px",
+          position: "relative",
+          overflow: "hidden",
+          background: "var(--gradient-hero)",
+        }}
       >
-        <div className="relative z-10">
+        <div style={{ position: "relative", zIndex: 1 }}>
           <div
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-4 text-xs font-bold"
-            style={{ background: "rgba(246, 146, 30, 0.2)", color: "#fdc24e" }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 16px",
+              borderRadius: 999,
+              marginBottom: 16,
+              fontSize: 12,
+              fontWeight: 700,
+              background: "rgba(246, 146, 30, 0.2)",
+              color: "#fdc24e",
+            }}
           >
-            FASE 1A — ANTES DA TRANSFORMACAO DIGITAL
+            <LayoutDashboard size={14} />
+            PAINEL DE PROJETOS
           </div>
-          <h2 className="text-white text-xl sm:text-2xl font-bold mb-2">
-            Como era o caos em cada setor?
+          <h2
+            style={{
+              color: "#fff",
+              fontSize: 24,
+              fontWeight: 700,
+              marginBottom: 8,
+            }}
+          >
+            Seus projetos de votacao
           </h2>
-          <p className="text-sm max-w-2xl" style={{ color: "rgba(255,255,255,0.65)" }}>
-            Cada modulo abaixo representa um sistema que foi criado no FIPS.
-            Para cada um, existem 3 cenarios ilustrando como era o dia a dia
-            antes da digitalizacao. Gestores: aprovem os cenarios que melhor
-            representam a realidade passada.
+          <p
+            style={{
+              fontSize: 14,
+              maxWidth: 640,
+              color: "rgba(255,255,255,0.65)",
+              lineHeight: 1.6,
+              margin: 0,
+            }}
+          >
+            Gerencie seus projetos arrastando os cards entre as colunas.
+            Crie novos projetos, acompanhe votacoes e finalize resultados.
           </p>
         </div>
-        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-10" style={{ background: "#fff" }} />
-        <div className="absolute -bottom-16 -left-8 w-56 h-56 rounded-full opacity-5" style={{ background: "#fff" }} />
+        <div
+          style={{
+            position: "absolute",
+            top: -40,
+            right: -40,
+            width: 160,
+            height: 160,
+            borderRadius: "50%",
+            opacity: 0.1,
+            background: "#fff",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: -64,
+            left: -32,
+            width: 224,
+            height: 224,
+            borderRadius: "50%",
+            opacity: 0.05,
+            background: "#fff",
+          }}
+        />
       </div>
 
-      {/* Filters */}
-      <div className="max-w-[1400px] mx-auto w-full px-4 sm:px-6 mt-6">
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--foreground-subtle)" }} />
-            <input
-              type="text"
-              placeholder="Buscar modulo, setor ou cenario..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm font-medium outline-none transition-all"
-              style={{ background: "var(--bg-card)", border: "2px solid var(--border)", color: "var(--foreground)" }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--fips-blue)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter size={14} style={{ color: "var(--foreground-muted)" }} />
-            <span className="text-xs font-semibold" style={{ color: "var(--foreground-muted)" }}>
-              {filteredModules.length} de {modulosCaos.length} modulos
-            </span>
-          </div>
+      {/* Kanban Board */}
+      <div
+        style={{
+          padding: "24px 16px 48px",
+          maxWidth: 1440,
+          margin: "0 auto",
+          width: "100%",
+        }}
+      >
+        {/* New project button */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+          <Link
+            href="/projeto/novo"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 20px",
+              borderRadius: 14,
+              background: "var(--primary)",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 600,
+              textDecoration: "none",
+              boxShadow: "0 2px 8px rgba(246,146,30,0.3)",
+              transition: "transform 0.15s, box-shadow 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.boxShadow = "0 4px 16px rgba(246,146,30,0.4)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(246,146,30,0.3)";
+            }}
+          >
+            <Plus size={18} />
+            Novo Projeto
+          </Link>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          {sectors.map((sector) => {
-            const isActive = activeSector === sector;
-            const count = sector === "Todos" ? modulosCaos.length : modulosCaos.filter((m) => m.sector === sector).length;
+        {/* Columns container */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 16,
+          }}
+          className="kanban-grid"
+        >
+          {COLUMNS.map((col) => {
+            const colProjects = getColumnProjects(col.status);
+            const isOver = dragOverColumn === col.status;
+
             return (
-              <button
-                key={sector}
-                onClick={() => setActiveSector(sector)}
-                className="px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer"
+              <div
+                key={col.status}
+                onDragOver={(e) => handleDragOver(e, col.status)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, col.status)}
                 style={{
-                  background: isActive ? "var(--primary)" : "var(--bg-card)",
-                  color: isActive ? "#fff" : "var(--foreground-muted)",
-                  border: `2px solid ${isActive ? "var(--primary)" : "var(--border)"}`,
-                  boxShadow: isActive ? "var(--shadow-primary)" : "none",
-                  transform: isActive ? "translateY(-1px)" : "none",
+                  background: isOver ? col.bgTint : "transparent",
+                  borderRadius: 20,
+                  padding: 12,
+                  minHeight: 400,
+                  transition: "background 0.2s",
+                  border: isOver ? `2px dashed ${col.color}` : "2px dashed transparent",
                 }}
               >
-                {sector} ({count})
-              </button>
+                {/* Column header */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 16,
+                    padding: "8px 12px",
+                    borderRadius: 12,
+                    background: col.bgTint,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: col.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "var(--foreground)",
+                      flex: 1,
+                    }}
+                  >
+                    {col.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: col.color,
+                      background: "var(--bg-card)",
+                      padding: "2px 10px",
+                      borderRadius: 999,
+                      border: `1px solid ${col.color}`,
+                    }}
+                  >
+                    {colProjects.length}
+                  </span>
+                </div>
+
+                {/* Cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {loadingProjects && colProjects.length === 0 && (
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: "32px 16px",
+                        fontSize: 13,
+                        color: "var(--foreground-muted)",
+                      }}
+                    >
+                      Carregando...
+                    </div>
+                  )}
+
+                  {colProjects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      memberCount={memberCounts[project.id] ?? 0}
+                      voteProgress={voteCounts[project.id] ?? { total: 0, voted: 0 }}
+                      isDragging={draggedId === project.id}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                    />
+                  ))}
+
+                  {!loadingProjects && colProjects.length === 0 && (
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: "40px 16px",
+                        fontSize: 13,
+                        color: "var(--foreground-muted)",
+                        borderRadius: 14,
+                        border: "2px dashed var(--border)",
+                      }}
+                    >
+                      Nenhum projeto
+                    </div>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* Module list */}
-      <div className="max-w-[1400px] mx-auto w-full px-4 sm:px-6 flex flex-col gap-6 pb-8">
-        {filteredModules.map((module) => (
-          <ModuleSection
-            key={module.id}
-            module={module}
-            voterName={voterName}
-            votes={votes}
-            onVote={handleVote}
+      {/* Responsive styles */}
+      <style jsx global>{`
+        @media (max-width: 1024px) {
+          .kanban-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .kanban-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ==================== Project Card ====================
+
+interface ProjectCardProps {
+  project: Project;
+  memberCount: number;
+  voteProgress: { total: number; voted: number };
+  isDragging: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd: () => void;
+}
+
+function ProjectCard({
+  project,
+  memberCount,
+  voteProgress,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+}: ProjectCardProps) {
+  const [hovered, setHovered] = useState(false);
+  const progressPercent =
+    voteProgress.total > 0 ? Math.round((voteProgress.voted / voteProgress.total) * 100) : 0;
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, project.id)}
+      onDragEnd={onDragEnd}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: "var(--bg-card)",
+        borderRadius: 14,
+        border: "1px solid var(--border)",
+        boxShadow: hovered ? "var(--shadow-card-hover)" : "var(--shadow-card)",
+        opacity: isDragging ? 0.5 : 1,
+        cursor: "grab",
+        transition: "box-shadow 0.2s, opacity 0.2s, transform 0.15s",
+        transform: hovered && !isDragging ? "translateY(-2px)" : "none",
+        overflow: "hidden",
+      }}
+    >
+      {/* Cover image */}
+      {project.cover_image ? (
+        <div
+          style={{
+            height: 120,
+            background: `url(${project.cover_image}) center/cover no-repeat`,
+            borderBottom: "1px solid var(--border)",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            height: 56,
+            background: "linear-gradient(135deg, var(--fips-blue), var(--fips-cyan))",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ImageIcon size={20} style={{ color: "rgba(255,255,255,0.4)" }} />
+        </div>
+      )}
+
+      {/* Content */}
+      <div style={{ padding: "14px 16px 16px" }}>
+        {/* Drag handle + title */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 6 }}>
+          <GripVertical
+            size={16}
+            style={{
+              color: "var(--foreground-muted)",
+              opacity: 0.4,
+              flexShrink: 0,
+              marginTop: 2,
+            }}
           />
-        ))}
-        {filteredModules.length === 0 && (
-          <div className="text-center py-16">
-            <p className="text-lg font-semibold" style={{ color: "var(--foreground-muted)" }}>Nenhum modulo encontrado</p>
-            <p className="text-sm mt-1" style={{ color: "var(--foreground-subtle)" }}>Tente outro filtro ou termo de busca</p>
+          <Link
+            href={`/projeto/${project.id}`}
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "var(--foreground)",
+              textDecoration: "none",
+              lineHeight: 1.3,
+              flex: 1,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {project.name}
+          </Link>
+        </div>
+
+        {/* Description */}
+        {project.description && (
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--foreground-muted)",
+              lineHeight: 1.5,
+              margin: "0 0 12px",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {project.description}
+          </p>
+        )}
+
+        {/* Vote progress bar */}
+        {voteProgress.total > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground-muted)" }}>
+                <Vote size={12} style={{ display: "inline", verticalAlign: "-2px", marginRight: 4 }} />
+                Progresso
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--fips-blue)" }}>
+                {voteProgress.voted}/{voteProgress.total} ({progressPercent}%)
+              </span>
+            </div>
+            <div
+              style={{
+                height: 6,
+                borderRadius: 3,
+                background: "var(--border)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${progressPercent}%`,
+                  borderRadius: 3,
+                  background:
+                    progressPercent === 100
+                      ? "var(--success)"
+                      : "linear-gradient(90deg, var(--fips-blue), var(--fips-cyan))",
+                  transition: "width 0.3s ease",
+                }}
+              />
+            </div>
           </div>
         )}
-      </div>
 
-      <VotingPanel votes={votes} voterName={voterName} />
+        {/* Footer: creator + member count */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingTop: 10,
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {project.created_by_avatar ? (
+              <img
+                src={project.created_by_avatar}
+                alt={project.created_by_name}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  border: "2px solid var(--border)",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  background: "var(--fips-blue)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#fff",
+                }}
+              >
+                {(project.created_by_name || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "var(--foreground-muted)",
+                maxWidth: 100,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {project.created_by_name || project.created_by_email}
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--foreground-muted)",
+            }}
+          >
+            <Users size={14} />
+            {memberCount}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

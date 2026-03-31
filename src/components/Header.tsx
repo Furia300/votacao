@@ -1,18 +1,11 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
-import { Flame, BarChart3, LogOut } from "lucide-react";
+import { Vote, LogOut, Plus } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
-interface HeaderProps {
-  totalModules: number;
-  totalExamples: number;
-}
-
-export default function Header({ totalModules, totalExamples }: HeaderProps) {
+export default function Header() {
   const { user, signOut } = useAuth();
-  const pathname = usePathname();
 
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
   const userAvatar = user?.user_metadata?.avatar_url || "";
@@ -32,58 +25,44 @@ export default function Header({ totalModules, totalExamples }: HeaderProps) {
         borderBottom: "1px solid var(--border-light)",
       }}
     >
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-        {/* Logo area */}
-        <div className="flex items-center gap-3">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-3" style={{ textDecoration: "none" }}>
           <div
             className="flex items-center justify-center w-10 h-10 rounded-xl"
             style={{
-              background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-              boxShadow: "0 4px 12px -4px rgba(239, 68, 68, 0.4)",
+              background: "linear-gradient(135deg, #f6921e 0%, #e07310 100%)",
+              boxShadow: "0 4px 12px -4px rgba(246, 146, 30, 0.4)",
             }}
           >
-            <Flame size={20} color="#fff" />
+            <Vote size={20} color="#fff" />
           </div>
           <div>
             <h1 className="text-base font-bold leading-tight" style={{ color: "var(--foreground)" }}>
-              <span style={{ color: "var(--error)" }}>ATO 1</span> — O Caos
+              Votacao <span style={{ color: "var(--primary)" }}>FIPS</span>
             </h1>
             <p className="text-[11px] font-medium" style={{ color: "var(--foreground-muted)" }}>
-              {totalModules} modulos | {totalExamples} cenarios do passado
+              Centro de Aprovacao de Projetos
             </p>
           </div>
-        </div>
+        </Link>
 
-        {/* Nav + User */}
+        {/* Actions + User */}
         <div className="flex items-center gap-3">
-          {/* Nav tabs */}
-          <nav className="hidden sm:flex items-center gap-1 p-1 rounded-xl" style={{ background: "var(--bg-muted)" }}>
-            <Link
-              href="/"
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={{
-                background: pathname === "/" ? "var(--bg-card)" : "transparent",
-                color: pathname === "/" ? "var(--foreground)" : "var(--foreground-muted)",
-                boxShadow: pathname === "/" ? "var(--shadow-sm)" : "none",
-              }}
-            >
-              Votacao
-            </Link>
-            <Link
-              href="/painel"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={{
-                background: pathname === "/painel" ? "var(--bg-card)" : "transparent",
-                color: pathname === "/painel" ? "var(--foreground)" : "var(--foreground-muted)",
-                boxShadow: pathname === "/painel" ? "var(--shadow-sm)" : "none",
-              }}
-            >
-              <BarChart3 size={13} />
-              Painel
-            </Link>
-          </nav>
+          <Link
+            href="/projeto/novo"
+            className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all"
+            style={{
+              background: "var(--fips-cyan)",
+              color: "#fff",
+              textDecoration: "none",
+              boxShadow: "0 4px 12px -4px rgba(60, 169, 201, 0.4)",
+            }}
+          >
+            <Plus size={14} />
+            Novo Projeto
+          </Link>
 
-          {/* User pill */}
           {user && (
             <div className="flex items-center gap-2">
               <div
