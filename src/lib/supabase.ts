@@ -1,19 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tsldyoygmcqlmqwqkjml.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-let _supabase: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient {
-  if (!supabaseAnonKey) {
-    throw new Error('Supabase anon key not configured');
-  }
-  if (!_supabase) {
-    _supabase = createClient(supabaseUrl, supabaseAnonKey);
-  }
-  return _supabase;
-}
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface Vote {
   id?: string;
@@ -21,12 +6,13 @@ export interface Vote {
   module_id: number;
   module_name: string;
   voter_name: string;
+  voter_email: string;
+  voter_avatar?: string;
   approved: boolean;
   created_at?: string;
 }
 
-export async function submitVote(vote: Omit<Vote, 'id' | 'created_at'>) {
-  const supabase = getSupabase();
+export async function submitVote(supabase: SupabaseClient, vote: Omit<Vote, 'id' | 'created_at'>) {
   const { data, error } = await supabase
     .from('votes')
     .upsert(
@@ -35,9 +21,11 @@ export async function submitVote(vote: Omit<Vote, 'id' | 'created_at'>) {
         module_id: vote.module_id,
         module_name: vote.module_name,
         voter_name: vote.voter_name,
+        voter_email: vote.voter_email,
+        voter_avatar: vote.voter_avatar || null,
         approved: vote.approved,
       },
-      { onConflict: 'example_id,voter_name' }
+      { onConflict: 'example_id,voter_email' }
     )
     .select();
 
@@ -45,8 +33,7 @@ export async function submitVote(vote: Omit<Vote, 'id' | 'created_at'>) {
   return data;
 }
 
-export async function getVotes() {
-  const supabase = getSupabase();
+export async function getVotes(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('votes')
     .select('*')
@@ -56,23 +43,38 @@ export async function getVotes() {
   return data as Vote[];
 }
 
-export async function getVoteSummary() {
-  const supabase = getSupabase();
+export async function getMyVotes(supabase: SupabaseClient, email: string) {
   const { data, error } = await supabase
     .from('votes')
-    .select('example_id, module_id, module_name, approved');
+    .select('*')
+    .eq('voter_email', email)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as Vote[];
+}
+
+export async function getAllVotesGroupedByUser(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('votes')
+    .select('*')
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
 
-  const summary: Record<string, { total: number; approved: number; module_id: number; module_name: string }> = {};
+  const grouped: Record<string, { name: string; email: string; avatar?: string; votes: Vote[] }> = {};
 
-  (data || []).forEach((vote: { example_id: string; module_id: number; module_name: string; approved: boolean }) => {
-    if (!summary[vote.example_id]) {
-      summary[vote.example_id] = { total: 0, approved: 0, module_id: vote.module_id, module_name: vote.module_name };
+  (data as Vote[] || []).forEach((vote) => {
+    if (!grouped[vote.voter_email]) {
+      grouped[vote.voter_email] = {
+        name: vote.voter_name,
+        email: vote.voter_email,
+        avatar: vote.voter_avatar,
+        votes: [],
+      };
     }
-    summary[vote.example_id].total++;
-    if (vote.approved) summary[vote.example_id].approved++;
+    grouped[vote.voter_email].votes.push(vote);
   });
 
-  return summary;
+  return grouped;
 }
