@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --primary: #f6921e;
+  --primary-hover: #e4891d;
+  --primary-light: #fdc24e;
+  --primary-50: rgba(246, 146, 30, 0.08);
+  --primary-100: rgba(246, 146, 30, 0.12);
+
+  --fips-blue: #0090d0;
+  --fips-blue-dark: #007ab5;
+  --fips-cyan: #3ca9c9;
+  --fips-cyan-hover: #339bb8;
+
+  --accent: #f6921e;
+  --accent-hover: #e4891d;
+  --accent-light: #fdc24e;
+  --accent-50: rgba(246, 178, 76, 0.12);
+
+  --success: #00c64c;
+  --fips-green-light: #8be5ad;
+  --warning: #f6921e;
+  --error: #ef4444;
+  --info: #0090d0;
+
+  --bg: #f4f6fb;
+  --bg-card: #ffffff;
+  --bg-elevated: #eaf0f8;
+  --bg-hover: #e0e8f2;
+  --bg-muted: #f3f6fb;
+
+  --surface-dark: #002a68;
+  --surface-dark-soft: #003b8f;
+  --surface-dark-border: rgba(255, 255, 255, 0.12);
+
+  --foreground: #0f172a;
+  --foreground-muted: #475569;
+  --foreground-subtle: #7b8c96;
+
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+  --border-focus: #0090d0;
+
+  --gradient-hero: linear-gradient(135deg, #003b8f 0%, #0090d0 50%, #002a68 100%);
+  --gradient-cta: linear-gradient(90deg, #002a68 0%, #0090d0 100%);
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 24px rgba(15, 23, 42, 0.06);
+  --shadow-card-hover: 0 2px 6px rgba(15, 23, 42, 0.06), 0 18px 32px rgba(15, 23, 42, 0.1);
+  --shadow-primary: 0 8px 24px rgba(246, 146, 30, 0.25);
+
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --duration: 0.2s;
+  --duration-slow: 0.3s;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-fips-blue: var(--fips-blue);
+  --color-fips-cyan: var(--fips-cyan);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-card: var(--bg-card);
+  --color-muted: var(--foreground-muted);
+  --color-subtle: var(--foreground-subtle);
+  --color-surface-dark: var(--surface-dark);
+  --color-surface-dark-soft: var(--surface-dark-soft);
+  --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--foreground);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(0, 144, 208, 0.18);
+  color: #0b1f44;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0090d0;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.4s var(--ease-out) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s var(--ease-out) forwards;
+}
