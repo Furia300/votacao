@@ -39,10 +39,10 @@ export default function Header() {
           </div>
           <div>
             <h1 className="text-base font-bold leading-tight" style={{ color: "var(--foreground)" }}>
-              Votacao <span style={{ color: "var(--primary)" }}>FIPS</span>
+              Votação <span style={{ color: "var(--primary)" }}>FIPS</span>
             </h1>
             <p className="text-[11px] font-medium" style={{ color: "var(--foreground-muted)" }}>
-              Centro de Aprovacao de Projetos
+              Centro de Aprovação de Projetos
             </p>
           </div>
         </Link>

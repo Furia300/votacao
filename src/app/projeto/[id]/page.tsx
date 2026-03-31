@@ -31,7 +31,6 @@ import {
   Image,
   ChevronLeft,
   ThumbsUp,
-  ThumbsDown,
   CheckCircle2,
   Clock,
   Trophy,
@@ -43,7 +42,7 @@ import {
 function StatusBadge({ status }: { status: Project["status"] }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
     draft: { label: "Rascunho", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
-    voting: { label: "Em Votacao", bg: "rgba(246,146,30,0.12)", color: "#f6921e" },
+    voting: { label: "Em Votação", bg: "rgba(246,146,30,0.12)", color: "#f6921e" },
     finalized: { label: "Finalizado", bg: "rgba(0,198,76,0.12)", color: "#00c64c" },
     archived: { label: "Arquivado", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
   };
@@ -474,7 +473,7 @@ export default function ProjectVotingPage() {
             >
               {(
                 [
-                  { key: "voting" as const, label: "Votacao", icon: <CircleDot size={16} /> },
+                  { key: "voting" as const, label: "Votação", icon: <CircleDot size={16} /> },
                   { key: "documents" as const, label: "Documentos", icon: <FileText size={16} /> },
                 ] as const
               ).map((tab) => (
@@ -616,7 +615,7 @@ export default function ProjectVotingPage() {
                   >
                     <CircleDot size={40} color="var(--foreground-subtle)" style={{ marginBottom: 12 }} />
                     <p style={{ fontWeight: 600, color: "var(--foreground-muted)", margin: 0 }}>
-                      Nenhum item de votacao cadastrado.
+                      Nenhum item de votação cadastrado.
                     </p>
                   </div>
                 )}
@@ -680,7 +679,7 @@ export default function ProjectVotingPage() {
                         >
                           {item.type === "image_select" && <><Image size={12} /> Imagem</>}
                           {item.type === "single_choice" && <><CircleDot size={12} /> Escolha</>}
-                          {item.type === "approval" && <><ThumbsUp size={12} /> Aprovacao</>}
+                          {item.type === "approval" && <><ThumbsUp size={12} /> Aprovação</>}
                         </span>
                       </div>
 
@@ -932,7 +931,7 @@ export default function ProjectVotingPage() {
                       ) : (
                         <Lock size={18} />
                       )}
-                      Finalizar Votacao
+                      Finalizar Votação
                     </button>
                   </div>
                 )}
@@ -976,7 +975,7 @@ export default function ProjectVotingPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <Users size={16} color="var(--primary)" />
               <h3 style={{ fontWeight: 700, fontSize: 14, color: "var(--foreground)", margin: 0 }}>
-                Progresso da Votacao
+                Progresso da Votação
               </h3>
             </div>
 

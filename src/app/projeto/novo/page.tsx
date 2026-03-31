@@ -413,7 +413,7 @@ export default function NovoProjetoPage() {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
               <input
                 style={inputStyle}
-                placeholder="Label da opcao"
+                placeholder="Label da opção"
                 value={opt.label}
                 onChange={(e) => updateOption(itemIdx, optIdx, "label", e.target.value)}
                 onFocus={handleFocus}
@@ -422,7 +422,7 @@ export default function NovoProjetoPage() {
               {item.type === "single_choice" && (
                 <input
                   style={inputStyle}
-                  placeholder="Descricao (opcional)"
+                  placeholder="Descrição (opcional)"
                   value={opt.description}
                   onChange={(e) =>
                     updateOption(itemIdx, optIdx, "description", e.target.value)
@@ -450,7 +450,7 @@ export default function NovoProjetoPage() {
           </div>
         ))}
         <button style={outlineBtn} onClick={() => addOption(itemIdx)}>
-          <Plus size={16} /> Adicionar opcao
+          <Plus size={16} /> Adicionar opção
         </button>
       </div>
     );
@@ -506,7 +506,7 @@ export default function NovoProjetoPage() {
             margin: 0,
           }}
         >
-          Novo Projeto de Votacao
+          Novo Projeto de Votação
         </h1>
       </div>
 
@@ -525,7 +525,7 @@ export default function NovoProjetoPage() {
         <div style={cardStyle}>
           <div style={sectionTitle}>
             <FileText size={20} style={{ color: "var(--fips-cyan, #3ca9c9)" }} />
-            Informacoes do Projeto
+            Informações do Projeto
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -533,7 +533,7 @@ export default function NovoProjetoPage() {
               <label style={labelStyle}>Nome do Projeto *</label>
               <input
                 style={inputStyle}
-                placeholder="Ex: Votacao de Design Q1 2026"
+                placeholder="Ex: Votação de Design Q1 2026"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onFocus={handleFocus}
@@ -542,10 +542,10 @@ export default function NovoProjetoPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>Descricao</label>
+              <label style={labelStyle}>Descrição</label>
               <textarea
                 style={{ ...inputStyle, minHeight: 80, resize: "vertical" }}
-                placeholder="Descreva o objetivo deste projeto de votacao..."
+                placeholder="Descreva o objetivo deste projeto de votação..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onFocus={handleFocus}
@@ -679,7 +679,7 @@ export default function NovoProjetoPage() {
         <div style={cardStyle}>
           <div style={sectionTitle}>
             <List size={20} style={{ color: "var(--fips-cyan, #3ca9c9)" }} />
-            Itens de Votacao
+            Itens de Votação
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -731,7 +731,7 @@ export default function NovoProjetoPage() {
 
                   <input
                     style={inputStyle}
-                    placeholder="Descricao (opcional)"
+                    placeholder="Descrição (opcional)"
                     value={item.description}
                     onChange={(e) => updateVotingItem(idx, "description", e.target.value)}
                     onFocus={handleFocus}
@@ -739,7 +739,7 @@ export default function NovoProjetoPage() {
                   />
 
                   <div>
-                    <label style={labelStyle}>Tipo de Votacao</label>
+                    <label style={labelStyle}>Tipo de Votação</label>
                     <select
                       value={item.type}
                       onChange={(e) => updateVotingItem(idx, "type", e.target.value)}
@@ -752,14 +752,14 @@ export default function NovoProjetoPage() {
                       }}
                     >
                       <option value="single_choice">Escolha unica (texto)</option>
-                      <option value="image_select">Selecao de imagem</option>
-                      <option value="approval">Aprovacao (aprovar/rejeitar)</option>
+                      <option value="image_select">Seleção de imagem</option>
+                      <option value="approval">Aprovação (aprovar/rejeitar)</option>
                     </select>
                   </div>
 
                   {/* Options */}
                   <div>
-                    <label style={labelStyle}>Opcoes</label>
+                    <label style={labelStyle}>Opções</label>
                     {renderOptionFields(item, idx)}
                   </div>
                 </div>
@@ -771,7 +771,7 @@ export default function NovoProjetoPage() {
             style={{ ...outlineBtn, marginTop: votingItems.length > 0 ? 16 : 0 }}
             onClick={addVotingItem}
           >
-            <Plus size={16} /> Adicionar item de votacao
+            <Plus size={16} /> Adicionar item de votação
           </button>
         </div>
 
@@ -855,7 +855,7 @@ export default function NovoProjetoPage() {
               margin: "0 0 12px",
             }}
           >
-            Cole um arquivo .md com o briefing do projeto. A IA pode gerar itens de votacao
+            Cole um arquivo .md com o briefing do projeto. A IA pode gerar itens de votação
             automaticamente.
           </p>
 
@@ -871,10 +871,10 @@ export default function NovoProjetoPage() {
           <button
             style={{ ...secondaryBtn, marginTop: 12 }}
             onClick={() =>
-              alert("Conecte a API Key do Claude nas configuracoes")
+              alert("Conecte a API Key do Claude nas configurações")
             }
           >
-            <Sparkles size={16} /> Gerar Votacao com IA
+            <Sparkles size={16} /> Gerar Votação com IA
           </button>
         </div>
 

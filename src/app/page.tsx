@@ -19,7 +19,7 @@ interface ColumnDef {
 
 const COLUMNS: ColumnDef[] = [
   { status: "draft", label: "Rascunho", color: "#6b7280", bgTint: "rgba(107,114,128,0.08)" },
-  { status: "voting", label: "Em Votacao", color: "var(--fips-blue)", bgTint: "rgba(0,144,208,0.08)" },
+  { status: "voting", label: "Em Votação", color: "var(--fips-blue)", bgTint: "rgba(0,144,208,0.08)" },
   { status: "finalized", label: "Finalizado", color: "var(--success)", bgTint: "rgba(0,198,76,0.08)" },
   { status: "archived", label: "Arquivado", color: "var(--foreground-muted)", bgTint: "rgba(71,85,105,0.08)" },
 ];
@@ -199,7 +199,7 @@ export default function Home() {
               marginBottom: 8,
             }}
           >
-            Seus projetos de votacao
+            Seus projetos de votação
           </h2>
           <p
             style={{
@@ -211,7 +211,7 @@ export default function Home() {
             }}
           >
             Gerencie seus projetos arrastando os cards entre as colunas.
-            Crie novos projetos, acompanhe votacoes e finalize resultados.
+            Crie novos projetos, acompanhe votações e finalize resultados.
           </p>
         </div>
         <div
