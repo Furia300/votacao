@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import {
@@ -9,6 +9,9 @@ import {
   createVotingItem,
   createVotingOption,
   createDocument,
+  uploadFile,
+  isAcceptedFile,
+  getAcceptString,
 } from "@/lib/supabase";
 import LoginScreen from "@/components/LoginScreen";
 import {
@@ -22,6 +25,11 @@ import {
   X,
   CheckSquare,
   List,
+  Upload,
+  File,
+  AlertCircle,
+  Brain,
+  Settings,
 } from "lucide-react";
 
 // ---------- local types ----------
@@ -39,9 +47,14 @@ interface LocalVotingItem {
   options: LocalOption[];
 }
 
-interface LocalDocument {
-  title: string;
-  content_md: string;
+interface UploadedFile {
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  status: "pending" | "uploading" | "done" | "error";
+  url?: string;
+  error?: string;
 }
 
 // ---------- style helpers ----------
@@ -144,11 +157,31 @@ const sectionTitle: React.CSSProperties = {
   fontFamily: "Manrope, sans-serif",
 };
 
+// ---------- file helpers ----------
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function getFileIcon(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "svg", "gif", "webp"].includes(ext)) return <Image size={18} style={{ color: "#3b82f6" }} />;
+  if (["doc", "docx"].includes(ext)) return <FileText size={18} style={{ color: "#2563eb" }} />;
+  if (["ppt", "pptx"].includes(ext)) return <FileText size={18} style={{ color: "#ea580c" }} />;
+  if (["pdf"].includes(ext)) return <FileText size={18} style={{ color: "#dc2626" }} />;
+  if (["xls", "xlsx", "csv"].includes(ext)) return <FileText size={18} style={{ color: "#16a34a" }} />;
+  if (["md", "txt", "json"].includes(ext)) return <FileText size={18} style={{ color: "#6b7280" }} />;
+  return <File size={18} style={{ color: "var(--foreground-muted)" }} />;
+}
+
 // ---------- component ----------
 
 export default function NovoProjetoPage() {
   const { user, loading, supabase } = useAuth();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Project info
   const [name, setName] = useState("");
@@ -162,11 +195,15 @@ export default function NovoProjetoPage() {
   // Voting items
   const [votingItems, setVotingItems] = useState<LocalVotingItem[]>([]);
 
-  // Documents
-  const [documents, setDocuments] = useState<LocalDocument[]>([]);
+  // File uploads
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Claude AI
   const [claudeInput, setClaudeInput] = useState("");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiModel, setAiModel] = useState("claude-sonnet-4-6");
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   // Submitting
   const [submitting, setSubmitting] = useState(false);
@@ -274,20 +311,150 @@ export default function NovoProjetoPage() {
     );
   }
 
-  // ---------- documents ----------
+  // ---------- file upload ----------
 
-  function addDocument() {
-    setDocuments((prev) => [...prev, { title: "", content_md: "" }]);
+  function handleFilesSelected(files: FileList | null) {
+    if (!files) return;
+
+    const newFiles: UploadedFile[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!isAcceptedFile(file.name)) {
+        newFiles.push({
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          status: "error",
+          error: "Tipo de arquivo não suportado",
+        });
+        continue;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        newFiles.push({
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          status: "error",
+          error: "Arquivo muito grande (max 50MB)",
+        });
+        continue;
+      }
+      newFiles.push({
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        status: "pending",
+      });
+    }
+    setUploadedFiles((prev) => [...prev, ...newFiles]);
   }
 
-  function updateDocument(idx: number, field: keyof LocalDocument, value: string) {
-    setDocuments((prev) =>
-      prev.map((doc, i) => (i === idx ? { ...doc, [field]: value } : doc))
-    );
+  function removeFile(idx: number) {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function removeDocument(idx: number) {
-    setDocuments((prev) => prev.filter((_, i) => i !== idx));
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(true);
+  }
+
+  function handleDragLeave() {
+    setIsDragOver(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+    handleFilesSelected(e.dataTransfer.files);
+  }
+
+  // ---------- AI generation ----------
+
+  async function handleAiGenerate() {
+    if (!aiApiKey.trim() || !claudeInput.trim()) {
+      alert("Preencha a API Key e o briefing para gerar com IA.");
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": aiApiKey.trim(),
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: aiModel,
+          max_tokens: 4096,
+          messages: [
+            {
+              role: "user",
+              content: `Analise este briefing de projeto e gere itens de votação estruturados em JSON.
+
+BRIEFING:
+${claudeInput}
+
+Responda APENAS com um JSON válido neste formato (sem markdown, sem explicação):
+{
+  "items": [
+    {
+      "title": "Título do item de votação",
+      "description": "Descrição breve",
+      "type": "single_choice",
+      "options": [
+        { "label": "Opção A", "description": "Descrição da opção" },
+        { "label": "Opção B", "description": "Descrição da opção" }
+      ]
+    }
+  ]
+}
+
+Tipos válidos: "single_choice", "image_select", "approval"
+Gere entre 3 e 8 itens relevantes baseados no briefing.`,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`API Error: ${response.status} - ${err}`);
+      }
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || "";
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("IA não retornou JSON válido");
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!parsed.items || !Array.isArray(parsed.items)) throw new Error("Formato inválido");
+
+      const newItems: LocalVotingItem[] = parsed.items.map((item: { title?: string; description?: string; type?: string; options?: Array<{ label?: string; description?: string; image_url?: string }> }) => ({
+        title: item.title || "",
+        description: item.description || "",
+        type: (["single_choice", "image_select", "approval"].includes(item.type || "") ? item.type : "single_choice") as LocalVotingItem["type"],
+        options: (item.options || []).map((opt: { label?: string; description?: string; image_url?: string }) => ({
+          label: opt.label || "",
+          description: opt.description || "",
+          image_url: opt.image_url || "",
+        })),
+      }));
+
+      setVotingItems((prev) => [...prev, ...newItems]);
+      alert(`${newItems.length} itens de votação gerados com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      alert(`Erro ao gerar com IA: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   // ---------- submit ----------
@@ -361,13 +528,31 @@ export default function NovoProjetoPage() {
         }
       }
 
-      // 5. Create documents
-      for (const doc of documents) {
-        if (!doc.title.trim()) continue;
+      // 5. Upload files and create documents
+      for (const uf of uploadedFiles) {
+        if (uf.status === "error") continue;
+
+        let fileUrl: string | null = null;
+        try {
+          setUploadedFiles((prev) =>
+            prev.map((f) => (f === uf ? { ...f, status: "uploading" as const } : f))
+          );
+          fileUrl = await uploadFile(supabase, project.id, uf.file);
+          setUploadedFiles((prev) =>
+            prev.map((f) => (f === uf ? { ...f, status: "done" as const, url: fileUrl! } : f))
+          );
+        } catch {
+          // If storage is not set up, save reference without file URL
+          fileUrl = null;
+        }
+
+        const ext = uf.name.split(".").pop()?.toLowerCase() || "";
         await createDocument(supabase, {
           project_id: project.id,
-          title: doc.title.trim(),
-          content_md: doc.content_md || null,
+          title: uf.name,
+          file_url: fileUrl,
+          file_type: ext,
+          content_md: null,
           uploaded_by_email: userEmail,
           uploaded_by_name: userName,
         });
@@ -675,6 +860,112 @@ export default function NovoProjetoPage() {
           )}
         </div>
 
+        {/* -------- Section: File Upload -------- */}
+        <div style={cardStyle}>
+          <div style={sectionTitle}>
+            <Upload size={20} style={{ color: "var(--fips-blue, #0090d0)" }} />
+            Arquivos do Projeto
+          </div>
+
+          <p style={{ fontSize: 13, color: "var(--foreground-subtle)", margin: "0 0 16px" }}>
+            Faça upload de documentos, apresentações, imagens e outros arquivos.
+            Formatos aceitos: DOC, DOCX, PPT, PPTX, PDF, MD, TXT, JPEG, PNG, SVG, GIF, XLS, XLSX, CSV, JSON.
+          </p>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: isDragOver ? "2px dashed var(--fips-blue)" : "2px dashed var(--border)",
+              borderRadius: 16,
+              padding: "40px 24px",
+              textAlign: "center",
+              cursor: "pointer",
+              background: isDragOver ? "rgba(0,144,208,0.04)" : "var(--bg-muted)",
+              transition: "all 0.2s",
+              marginBottom: uploadedFiles.length > 0 ? 16 : 0,
+            }}
+          >
+            <Upload
+              size={32}
+              style={{
+                color: isDragOver ? "var(--fips-blue)" : "var(--foreground-subtle)",
+                marginBottom: 8,
+              }}
+            />
+            <p style={{ fontWeight: 600, fontSize: 14, color: "var(--foreground)", margin: "0 0 4px" }}>
+              {isDragOver ? "Solte os arquivos aqui" : "Clique ou arraste arquivos"}
+            </p>
+            <p style={{ fontSize: 12, color: "var(--foreground-subtle)", margin: 0 }}>
+              Máximo 50MB por arquivo
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={getAcceptString()}
+              onChange={(e) => handleFilesSelected(e.target.files)}
+              style={{ display: "none" }}
+            />
+          </div>
+
+          {/* File list */}
+          {uploadedFiles.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {uploadedFiles.map((uf, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    background: uf.status === "error" ? "rgba(239,68,68,0.06)" : "var(--bg-muted)",
+                    border: uf.status === "error" ? "1px solid rgba(239,68,68,0.2)" : "1px solid var(--border)",
+                  }}
+                >
+                  {getFileIcon(uf.name)}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      fontWeight: 600,
+                      fontSize: 13,
+                      color: "var(--foreground)",
+                      margin: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {uf.name}
+                    </p>
+                    <p style={{ fontSize: 11, color: "var(--foreground-subtle)", margin: 0 }}>
+                      {formatFileSize(uf.size)}
+                      {uf.status === "error" && (
+                        <span style={{ color: "#ef4444", marginLeft: 8 }}>
+                          <AlertCircle size={11} style={{ display: "inline", verticalAlign: "-1px", marginRight: 2 }} />
+                          {uf.error}
+                        </span>
+                      )}
+                      {uf.status === "uploading" && (
+                        <span style={{ color: "var(--fips-blue)", marginLeft: 8 }}>Enviando...</span>
+                      )}
+                      {uf.status === "done" && (
+                        <span style={{ color: "var(--success)", marginLeft: 8 }}>Enviado</span>
+                      )}
+                    </p>
+                  </div>
+                  <button style={dangerBtn} onClick={() => removeFile(idx)}>
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* -------- Section: Voting Items -------- */}
         <div style={cardStyle}>
           <div style={sectionTitle}>
@@ -775,107 +1066,114 @@ export default function NovoProjetoPage() {
           </button>
         </div>
 
-        {/* -------- Section: Documents -------- */}
+        {/* -------- Section: AI Dashboard -------- */}
         <div style={cardStyle}>
           <div style={sectionTitle}>
-            <FileText size={20} style={{ color: "var(--primary, #f6921e)" }} />
-            Documentos
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {documents.map((doc, idx) => (
-              <div
-                key={idx}
-                style={{
-                  border: "1px solid var(--border, #e2e8f0)",
-                  borderRadius: 16,
-                  padding: 20,
-                  background: "var(--bg, #f4f6fb)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 10,
-                  }}
-                >
-                  <span
-                    style={{ fontSize: 14, fontWeight: 700, color: "var(--foreground)" }}
-                  >
-                    Documento {idx + 1}
-                  </span>
-                  <button style={dangerBtn} onClick={() => removeDocument(idx)}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <input
-                    style={inputStyle}
-                    placeholder="Titulo do documento"
-                    value={doc.title}
-                    onChange={(e) => updateDocument(idx, "title", e.target.value)}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                  />
-                  <textarea
-                    style={{ ...inputStyle, minHeight: 120, resize: "vertical" }}
-                    placeholder="Cole o conteudo Markdown aqui..."
-                    value={doc.content_md}
-                    onChange={(e) => updateDocument(idx, "content_md", e.target.value)}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button
-            style={{ ...outlineBtn, marginTop: documents.length > 0 ? 16 : 0 }}
-            onClick={addDocument}
-          >
-            <Plus size={16} /> Adicionar documento
-          </button>
-        </div>
-
-        {/* -------- Section: Claude AI -------- */}
-        <div style={cardStyle}>
-          <div style={sectionTitle}>
-            <Sparkles size={20} style={{ color: "#a855f7" }} />
-            Gerar com Claude AI
+            <Brain size={20} style={{ color: "#a855f7" }} />
+            Dashboard IA — Gerar Escopo com Claude
           </div>
 
           <p
             style={{
               fontSize: 13,
               color: "var(--foreground-subtle, #7b8c96)",
-              margin: "0 0 12px",
+              margin: "0 0 20px",
+              lineHeight: 1.6,
             }}
           >
-            Cole um arquivo .md com o briefing do projeto. A IA pode gerar itens de votação
-            automaticamente.
+            Conecte sua API Key do Claude para gerar automaticamente itens de votação
+            a partir do briefing do projeto. A IA analisa o conteúdo e cria sugestões
+            de votação estruturadas.
           </p>
 
-          <textarea
-            style={{ ...inputStyle, minHeight: 140, resize: "vertical" }}
-            placeholder="Cole o conteudo do arquivo .md aqui..."
-            value={claudeInput}
-            onChange={(e) => setClaudeInput(e.target.value)}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-          />
+          {/* API Config */}
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(168,85,247,0.06) 0%, rgba(168,85,247,0.02) 100%)",
+              border: "1px solid rgba(168,85,247,0.15)",
+              borderRadius: 16,
+              padding: 20,
+              marginBottom: 20,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <Settings size={16} style={{ color: "#a855f7" }} />
+              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--foreground)" }}>
+                Configuração da API
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>API Key do Claude (Anthropic)</label>
+                <input
+                  style={inputStyle}
+                  type="password"
+                  placeholder="sk-ant-api03-..."
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Modelo</label>
+                <select
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                  style={{ ...inputStyle, cursor: "pointer", appearance: "auto" as const }}
+                >
+                  <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Rápido)</option>
+                  <option value="claude-opus-4-6">Claude Opus 4.6 (Mais capaz)</option>
+                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Econômico)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Briefing input */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Briefing do Projeto</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 160, resize: "vertical" }}
+              placeholder="Cole aqui o briefing, escopo ou descrição do projeto. A IA irá analisar e gerar itens de votação automaticamente...
+
+Exemplo:
+- Precisamos decidir a paleta de cores do novo site
+- Escolher entre 3 layouts para a homepage
+- Aprovar ou rejeitar o novo logotipo
+- Decidir a tipografia principal"
+              value={claudeInput}
+              onChange={(e) => setClaudeInput(e.target.value)}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
+          </div>
 
           <button
-            style={{ ...secondaryBtn, marginTop: 12 }}
-            onClick={() =>
-              alert("Conecte a API Key do Claude nas configurações")
-            }
+            style={{
+              ...secondaryBtn,
+              background: "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)",
+              boxShadow: "0 4px 16px rgba(168,85,247,0.3)",
+              opacity: aiGenerating ? 0.6 : 1,
+              pointerEvents: aiGenerating ? "none" : "auto",
+            }}
+            onClick={handleAiGenerate}
+            disabled={aiGenerating}
           >
-            <Sparkles size={16} /> Gerar Votação com IA
+            <Sparkles size={16} />
+            {aiGenerating ? "Gerando..." : "Gerar Itens de Votação com IA"}
           </button>
+
+          {!aiApiKey && (
+            <p style={{ fontSize: 11, color: "var(--foreground-subtle)", marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
+              <AlertCircle size={12} />
+              Configure sua API Key acima para usar esta funcionalidade.
+            </p>
+          )}
         </div>
 
         {/* -------- Submit -------- */}

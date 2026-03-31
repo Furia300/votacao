@@ -177,3 +177,85 @@ export async function createDocument(sb: SupabaseClient, doc: Partial<Document>)
   if (error) throw error;
   return data as Document;
 }
+
+// ==================== FILE UPLOAD ====================
+
+const ACCEPTED_EXTENSIONS = [
+  '.doc', '.docx', '.ppt', '.pptx', '.pdf', '.md', '.txt',
+  '.jpeg', '.jpg', '.png', '.svg', '.gif', '.webp',
+  '.xls', '.xlsx', '.csv', '.json',
+];
+
+export function isAcceptedFile(filename: string): boolean {
+  const ext = '.' + filename.split('.').pop()?.toLowerCase();
+  return ACCEPTED_EXTENSIONS.includes(ext);
+}
+
+export function getAcceptString(): string {
+  return ACCEPTED_EXTENSIONS.join(',');
+}
+
+export async function uploadFile(sb: SupabaseClient, projectId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
+  const safeName = `${projectId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const { error } = await sb.storage.from('project-files').upload(safeName, file, {
+    cacheControl: '3600',
+    upsert: false,
+  });
+  if (error) throw error;
+
+  const { data } = sb.storage.from('project-files').getPublicUrl(safeName);
+  return data.publicUrl;
+}
+
+// ==================== WINNERS / RESULTS ====================
+
+export async function getWinningOptions(sb: SupabaseClient, projectId: string) {
+  const [items, options, allVotes] = await Promise.all([
+    getVotingItems(sb, projectId),
+    getVotingOptions(sb, projectId),
+    getProjectVotes(sb, projectId),
+  ]);
+
+  const results: Array<{
+    item: VotingItem;
+    winner: VotingOption | null;
+    voteCount: number;
+    totalVotes: number;
+  }> = [];
+
+  for (const item of items) {
+    const itemOpts = options.filter(o => o.item_id === item.id);
+    const itemVotes = allVotes.filter(v => v.item_id === item.id);
+
+    let maxCount = 0;
+    let winnerId: string | null = null;
+
+    for (const opt of itemOpts) {
+      const count = itemVotes.filter(v => v.option_id === opt.id).length;
+      if (count > maxCount) {
+        maxCount = count;
+        winnerId = opt.id;
+      }
+    }
+
+    results.push({
+      item,
+      winner: itemOpts.find(o => o.id === winnerId) ?? null,
+      voteCount: maxCount,
+      totalVotes: itemVotes.length,
+    });
+  }
+
+  return results;
+}
+
+export async function getFinalizedProjects(sb: SupabaseClient) {
+  const { data, error } = await sb.from('projects')
+    .select('*')
+    .eq('status', 'finalized')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data as Project[];
+}

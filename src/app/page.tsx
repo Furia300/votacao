@@ -249,38 +249,6 @@ export default function Home() {
           width: "100%",
         }}
       >
-        {/* New project button */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-          <Link
-            href="/projeto/novo"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px 20px",
-              borderRadius: 14,
-              background: "var(--primary)",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 600,
-              textDecoration: "none",
-              boxShadow: "0 2px 8px rgba(246,146,30,0.3)",
-              transition: "transform 0.15s, box-shadow 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 4px 16px rgba(246,146,30,0.4)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "0 2px 8px rgba(246,146,30,0.3)";
-            }}
-          >
-            <Plus size={18} />
-            Novo Projeto
-          </Link>
-        </div>
-
         {/* Columns container */}
         <div
           style={{

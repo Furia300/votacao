@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
-import { Vote, LogOut, Plus } from "lucide-react";
+import { Vote, LogOut, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 
 export default function Header() {
@@ -49,6 +49,19 @@ export default function Header() {
 
         {/* Actions + User */}
         <div className="flex items-center gap-3">
+          <Link
+            href="/vencedores"
+            className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all"
+            style={{
+              background: "rgba(0,198,76,0.1)",
+              color: "var(--success)",
+              textDecoration: "none",
+              border: "1px solid rgba(0,198,76,0.2)",
+            }}
+          >
+            <Trophy size={14} />
+            Vencedores
+          </Link>
           <Link
             href="/projeto/novo"
             className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all"
